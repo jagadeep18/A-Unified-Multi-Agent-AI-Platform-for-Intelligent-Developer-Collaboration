@@ -1,0 +1,61 @@
+flowchart TB
+    START([User Query]) --> ORCH
+    
+    subgraph ORCHESTRATOR["Orchestrator Node"]
+        ORCH[Parse Intent] --> CLASSIFY{Classify Intent}
+    end
+    
+    CLASSIFY -->|find teammates| PROJ_CHECK
+    CLASSIFY -->|plan project| PLAN_CHECK
+    CLASSIFY -->|just search| SM
+    CLASSIFY -->|unclear| CLARIFY
+    
+    subgraph PROJECT_EXTRACTION["Project Extraction"]
+        PROJ_CHECK{Project Exists?}
+        PROJ_CHECK -->|No| EXTRACT[Extract from Query]
+        EXTRACT --> SAVE_PROJ[(Save to MongoDB)]
+        SAVE_PROJ --> TF
+        PROJ_CHECK -->|Yes| TF
+    end
+    
+    subgraph SKILL_MATCHER["Skill Matcher Agent"]
+        SM[Generate Query Embedding] --> SEARCH[(Pinecone Search)]
+        SEARCH --> FILTER[Filter by Metadata]
+        FILTER --> RANK[Rank by Similarity]
+        RANK --> SM_CHECK{Enough Matches?}
+        SM_CHECK -->|No, retry| BROADEN[Broaden Search]
+        BROADEN --> SM
+        SM_CHECK -->|Yes| SM_OUT[Return Candidates]
+    end
+    
+    subgraph TEAM_FORMATION["Team Formation Agent"]
+        TF[Identify Required Roles] --> TF_CHECK{All Roles Filled?}
+        TF_CHECK -->|No| SM
+        SM_OUT --> TF_COMPOSE[Compose Team]
+        TF_COMPOSE --> TZ_CHECK[Check Timezones]
+        TZ_CHECK --> COMPAT[Calculate Compatibility]
+        COMPAT --> TF_OUT[Proposed Team]
+    end
+    
+    subgraph PROJECT_PLANNER["Project Planner Agent"]
+        PLAN_CHECK{Team Exists?}
+        PLAN_CHECK -->|No| TF
+        PLAN_CHECK -->|Yes| PP
+        TF_OUT --> PP_TRIGGER{Plan Needed?}
+        PP_TRIGGER -->|Yes| PP
+        PP_TRIGGER -->|No| FORMAT
+        PP[Generate Milestones] --> SPRINTS[Create Sprints]
+        SPRINTS --> TASKS[Generate Tasks]
+        TASKS --> ASSIGN[Assign to Members]
+        ASSIGN --> PP_OUT[Project Plan]
+    end
+    
+    SM_OUT --> FORMAT
+    TF_OUT --> FORMAT
+    PP_OUT --> FORMAT
+    CLARIFY --> END_CLARIFY([Ask User])
+    
+    subgraph RESPONSE["Response Formatter"]
+        FORMAT[Compile Results] --> JSON[Create JSON Response]
+        JSON --> END_SUCCESS([Return to User])
+    end
